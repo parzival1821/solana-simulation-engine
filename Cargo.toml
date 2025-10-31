@@ -1,0 +1,14 @@
+[package]
+name = "solana-forking-engine"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.6"
+serde = {version = "1.0.228", features = ["derive"]}
+serde_json  = "1.0.145"
+tokio = {version = "1.48.0", features = ["full"]}
+litesvm = "0.8.1"
+solana-sdk = "3.0.0"
+solana-system-interface = "2.0.0"
+uuid = {version = "1.18.1", features = ["v4"]}
