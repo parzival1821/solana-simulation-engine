@@ -30,9 +30,37 @@ pub struct ForkManager {
 impl ForkManager {
     // Constructor
     pub fn new() -> Self {
-        Self {
+         let manager = Self {
             forks: Arc::new(RwLock::new(HashMap::new())),
-        }
+        };
+        
+        // Start cleanup task
+        manager.start_cleanup_task();
+        
+        manager
+    }
+
+    fn start_cleanup_task(&self) {
+        let forks = Arc::clone(&self.forks);
+        
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            
+            loop {
+                interval.tick().await; // wait for 60 secs on this line
+                
+                // Clean up expired forks
+                let mut forks_map = forks.write().await;
+                let now = Instant::now();
+                
+                forks_map.retain(|_id, fork| {
+                    let age = now.duration_since(fork.timestamp);
+                    age < Duration::from_secs(900) // 15 mins
+                });
+                
+                println!("🧹 Cleanup: {} forks remaining", forks_map.len());
+            }
+        });
     }
     
     // Create a new fork
@@ -96,5 +124,18 @@ impl ForkManager {
         svm.set_account(pubkey, account);
         
         Ok(())
+    }
+
+    pub async fn send_transaction(&self, fork_id: &str, tx_data: &str) -> Result<(), String> {
+        let forks = self.forks.read().await;
+
+        let fork = forks.get(fork_id)
+                    .ok_or_else(|| format!("Fork not found : {}", fork_id))?;
+
+        let mut svm = fork.svm.write().await;
+
+        // Decode transaction from base64/base58
+        // Send it to the SVM
+        // Return signature
     }
 }
