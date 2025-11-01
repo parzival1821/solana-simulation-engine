@@ -1,1 +1,8 @@
 /target
+Cargo.lock
+.DS_Store
+*.swp
+*.swo
+EOF
+
+tests/tx_generator/target

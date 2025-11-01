@@ -12,3 +12,5 @@ litesvm = "0.8.1"
 solana-sdk = "3.0.0"
 solana-system-interface = "2.0.0"
 uuid = {version = "1.18.1", features = ["v4"]}
+bs58 = "0.5.1"
+bincode = "1.3"

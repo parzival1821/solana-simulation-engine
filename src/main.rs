@@ -69,6 +69,7 @@ async fn handle_rpc(
         // Standard RPC methods
         "getBalance" => rpc::standard::handle_get_balance(&manager, &fork_id, &params).await,
         "sendTransaction" => rpc::standard::handle_send_transaction(&manager, &fork_id, &params).await,
+        "getLatestBlockhash" => rpc::standard::handle_get_latest_blockhash(&manager, &fork_id, &params).await,
         "getAccountInfo" => rpc::standard::handle_get_account_info(&manager, &fork_id, &params).await,
         
         // Cheatcode methods

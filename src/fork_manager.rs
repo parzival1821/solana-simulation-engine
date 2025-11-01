@@ -6,8 +6,13 @@ use litesvm :: LiteSVM;
 use std::time::{Instant,Duration};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::account::Account;
+use solana_sdk::transaction::Transaction;
+use solana_sdk::message::Message;
+use solana_sdk::signer::Signer;
+use solana_sdk::hash::Hash;
 use std::str::FromStr;
 use solana_system_interface::program as system_program;
+use bincode;
 
 // TODO: What should we store for each fork?
 // For now, just store a String (placeholder)
@@ -95,7 +100,7 @@ impl ForkManager {
         
         Ok(balance)
     }
-    
+
     pub async fn set_balance(&self, fork_id: &str, address: &str, lamports: u64) -> Result<(), String> {
         let forks = self.forks.read().await;
         
@@ -126,7 +131,7 @@ impl ForkManager {
         Ok(())
     }
 
-    pub async fn send_transaction(&self, fork_id: &str, tx_data: &str) -> Result<(), String> {
+    pub async fn send_transaction(&self, fork_id: &str, tx_data: &str) -> Result<String, String> {
         let forks = self.forks.read().await;
 
         let fork = forks.get(fork_id)
@@ -135,7 +140,28 @@ impl ForkManager {
         let mut svm = fork.svm.write().await;
 
         // Decode transaction from base64/base58
+        let decoded = bs58::decode(tx_data)
+                        .into_vec()
+                        .map_err(|e| format!("Error in decoding tx to base 58 : {}", e))?;
+        
+        let tx : Transaction = bincode::deserialize(&decoded)
+                        .map_err(|e| format!("Error in deserializing the tx : {}", e))?;
+
         // Send it to the SVM
+        let result = svm.send_transaction(tx)
+                        .map_err(|e| format!("Transaction failed : {:?}", e))?;
+        
         // Return signature
+        Ok(result.signature.to_string())
+    }
+
+    pub async fn get_latest_blockhash(&self, fork_id: &str) -> Result<Hash, String> {
+        let forks = self.forks.read().await;
+        
+        let fork = forks.get(fork_id)
+            .ok_or_else(|| format!("Fork not found: {}", fork_id))?;
+        
+        let svm = fork.svm.read().await;
+        Ok(svm.latest_blockhash())
     }
 }
