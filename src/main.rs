@@ -1,20 +1,18 @@
 mod fork_manager;    
-mod rpc;            
+mod rpc;           
 
 use axum::{
-    extract::{Path,State},           // Lets handlers access shared state
-    routing::{get, post},     // HTTP method helpers
-    Json, Router,             // Core Axum types
+    extract::{Path,State},  
+    routing::{get, post},     
+    Json, Router,             
 };
 use serde_json::{json, Value};
 use fork_manager::ForkManager;
 
-#[tokio::main]  // This macro makes your main function async
+#[tokio::main]
 async fn main() {
-    // Create your fork manager (shared state)
     let manager = ForkManager::new();
-    
-    // Build your HTTP router - this defines all your endpoints
+
     let app = Router::new()
         .route("/health", get(health_check))      
         .route("/fork/create", post(create_fork))  
@@ -22,24 +20,21 @@ async fn main() {
         .with_state(manager);  
     
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await  // Wait for the binding to complete
-        .unwrap();  // Panic if it fails (fine for development)
+        .await  
+        .unwrap();
     
     println!("🚀 Server running on http://127.0.0.1:3000");
     
-    // Start the server and serve requests forever
     axum::serve(listener, app).await.unwrap();
 }
 
-// Handler for GET /health
 async fn health_check() -> Json<Value> {
     Json(json!({
         "status": "ok"
     }))
 }
 
-// Handler for POST /fork/create
-// State(manager) extracts the shared ForkManager from the router
+// State(manager) extracts the shared ForkManager from the router 
 async fn create_fork(
     State(manager): State<ForkManager>,
 ) -> Json<Value> {
@@ -57,7 +52,7 @@ async fn handle_rpc(
     State(manager): State<ForkManager>,
     Json(payload): Json<Value>,
 ) -> Json<Value> {
-    let method = payload.get("method")
+    let method = payload.get("method") // extract "method" field from JSON
         .and_then(|v| v.as_str())
         .unwrap_or("");
     

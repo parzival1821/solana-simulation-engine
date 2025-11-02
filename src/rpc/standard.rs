@@ -14,7 +14,7 @@ pub async fn handle_get_balance(
         .and_then(|a| a.as_str())
         .ok_or_else(|| "Missing address parameter".to_string())?;
     
-    // Get balance from fork manager
+    // Get balance from fork manager 
     let balance = manager.get_balance(fork_id, address).await?;
     
     // Return result
@@ -39,16 +39,6 @@ pub async fn handle_send_transaction(
     Ok(json!(signature))
 }
 
-/// Handle getAccountInfo RPC method (TODO for later)
-pub async fn handle_get_account_info(
-    manager: &ForkManager,
-    fork_id: &str,
-    params: &Value,
-) -> Result<Value, String> {
-    // TODO: Implement later
-    Err("getAccountInfo not yet implemented".to_string())
-}
-
 pub async fn handle_get_latest_blockhash(
     manager: &ForkManager,
     fork_id: &str,
@@ -60,4 +50,38 @@ pub async fn handle_get_latest_blockhash(
         "blockhash": blockhash.to_string(),
         "lastValidBlockHeight": 999999999  // Dummy value for testing
     }))
+}
+
+pub async fn handle_get_account_info(
+    manager: &ForkManager,
+    fork_id: &str,
+    params: &Value,
+) -> Result<Value, String> {
+    let address = params.get(0)
+        .and_then(|a| a.as_str())
+        .ok_or_else(|| "Missing address parameter".to_string())?;
+    
+    let account = manager.get_account_info(fork_id, address).await?;
+    
+    match account {
+        Some(acc) => {
+            // Encode data as base58
+            let data_base58 = bs58::encode(&acc.data).into_string();
+            
+            Ok(json!({
+                "value": {
+                    "lamports": acc.lamports,
+                    "owner": acc.owner.to_string(),
+                    "data": [data_base58, "base58"],
+                    "executable": acc.executable,
+                    "rentEpoch": acc.rent_epoch
+                }
+            }))
+        }
+        None => {
+            Ok(json!({
+                "value": null
+            }))
+        }
+    }
 }

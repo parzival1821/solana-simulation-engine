@@ -6,3 +6,4 @@ Cargo.lock
 EOF
 
 tests/tx_generator/target
+.env

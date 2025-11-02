@@ -2,21 +2,19 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use litesvm :: LiteSVM;
+use litesvm::LiteSVM;
 use std::time::{Instant,Duration};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::account::Account;
 use solana_sdk::transaction::Transaction;
-use solana_sdk::message::Message;
-use solana_sdk::signer::Signer;
 use solana_sdk::hash::Hash;
 use std::str::FromStr;
 use solana_system_interface::program as system_program;
 use bincode;
+use solana_client::rpc_client::RpcClient; 
 
-// TODO: What should we store for each fork?
-// For now, just store a String (placeholder)
-// Later we'll replace this with LiteSVM
+use dotenv::dotenv;
+use std::env;
 
 struct Fork {
     svm : Arc<RwLock<LiteSVM>>,
@@ -26,23 +24,52 @@ struct Fork {
 // Define the storage type
 type ForkStorage = Arc<RwLock<HashMap<String, Fork>>>;
 
-// The manager struct
 #[derive(Clone)]
 pub struct ForkManager {
     forks: ForkStorage,
+    rpc_client : Arc<RpcClient>
 }
 
 impl ForkManager {
-    // Constructor
     pub fn new() -> Self {
+
+        dotenv().ok();
+        let mainnet_api = env::var("MAINNET_HELIUS")
+                            .expect("Devnet api key must be set in .env");
+
+        let mainnet_default="https://api.mainnet-beta.solana.com";
+        
          let manager = Self {
             forks: Arc::new(RwLock::new(HashMap::new())),
+            rpc_client : Arc::new(RpcClient::new(mainnet_default.to_string()))
         };
         
         // Start cleanup task
         manager.start_cleanup_task();
         
         manager
+    }
+
+    pub async fn ensure_account_exists(&self, fork_id: &str, pubkey: &Pubkey) -> Result<(), String> {
+        let forks = self.forks.read().await;
+        let fork = forks.get(fork_id).ok_or("Fork not found")?;
+        
+        let mut svm = fork.svm.write().await;
+        
+        // Check if account exists
+        if svm.get_account(pubkey).is_none() {
+            // Fetch from mainnet
+            println!("🔍 Fetching account {} from mainnet...", pubkey);
+            
+            let account = self.rpc_client
+                .get_account(pubkey)
+                .map_err(|e| format!("Failed to fetch account: {}", e))?;
+            
+            // Load into fork
+            svm.set_account(*pubkey, account);
+        }
+        
+        Ok(())
     }
 
     fn start_cleanup_task(&self) {
@@ -52,7 +79,7 @@ impl ForkManager {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             
             loop {
-                interval.tick().await; // wait for 60 secs on this line
+                interval.tick().await; // wait for 60 secs on this line 
                 
                 // Clean up expired forks
                 let mut forks_map = forks.write().await;
@@ -63,25 +90,20 @@ impl ForkManager {
                     age < Duration::from_secs(900) // 15 mins
                 });
                 
-                println!("🧹 Cleanup: {} forks remaining", forks_map.len());
+                println!("Cleanup: {} forks remaining", forks_map.len());
             }
         });
     }
     
     // Create a new fork
     pub async fn create_fork(&self) -> String {
-        // TODO: 
-        // 1. Generate a UUID
         let uid = Uuid::new_v4().to_string();
-        // 2. Lock the HashMap for writing
         let mut forks = self.forks.write().await;
-        // 3. Insert a new entry
         let mut fork = Fork{
             svm : Arc::new(RwLock::new(LiteSVM::new())),
             timestamp : Instant::now()
         };
         forks.insert(uid.clone(), fork);
-        // 4. Return the fork ID
         uid
     }
 
@@ -94,11 +116,26 @@ impl ForkManager {
         let pubkey = Pubkey::from_str(address)
             .map_err(|e| format!("Invalid address: {}", e))?;
         
-        let svm = fork.svm.read().await;
-        let balance = svm.get_balance(&pubkey)
-            .ok_or_else(|| format!("Failed to get balance for {:?}", pubkey))?;
+        let mut svm = fork.svm.write().await;
         
-        Ok(balance)
+        // Check if account exists locally first
+        if let Some(account) = svm.get_account(&pubkey) {
+            return Ok(account.lamports);
+        }
+        
+        // Not found locally - try fetching from mainnet
+        drop(svm);  // Drop write lock before calling another method
+        drop(forks); // Drop read lock too
+        
+        println!("🔍 Account not in fork, fetching from mainnet...");
+        
+        // Fetch from mainnet (this will cache it)
+        if let Some(account) = self.get_account_info(fork_id, address).await? {
+            Ok(account.lamports)
+        } else {
+            // Account doesn't exist on mainnet either - return 0
+            Ok(0)
+        }
     }
 
     pub async fn set_balance(&self, fork_id: &str, address: &str, lamports: u64) -> Result<(), String> {
@@ -122,7 +159,6 @@ impl ForkManager {
                 rent_epoch: 0,
             });
         
-        // Set the balance (not add!)
         account.lamports = lamports;
         
         // Write back
@@ -163,5 +199,38 @@ impl ForkManager {
         
         let svm = fork.svm.read().await;
         Ok(svm.latest_blockhash())
+    }
+
+    pub async fn get_account_info(&self, fork_id: &str, address: &str) -> Result<Option<Account>, String> {
+        let forks = self.forks.read().await;
+        
+        let fork = forks.get(fork_id)
+            .ok_or_else(|| format!("Fork not found: {}", fork_id))?;
+        
+        let pubkey = Pubkey::from_str(address)
+            .map_err(|e| format!("Invalid address: {}", e))?;
+        
+        let mut svm = fork.svm.write().await;
+        
+        // First check if account exists locally
+        if let Some(account) = svm.get_account(&pubkey) {
+            return Ok(Some(account));
+        }
+        
+        // If not found locally, fetch from mainnet
+        println!("🔍 Fetching account {} from mainnet...", pubkey);
+        
+        match self.rpc_client.get_account(&pubkey) {
+            Ok(account) => {
+                // Cache it in the fork
+                svm.set_account(pubkey, account.clone());
+                println!("✓ Account loaded from mainnet and cached");
+                Ok(Some(account))
+            }
+            Err(e) => {
+                println!("⚠️  Account not found on mainnet: {}", e);
+                Ok(None)
+            }
+        }
     }
 }

@@ -111,6 +111,29 @@ curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
 See `tests/scripts/test_send_transaction.sh` for a complete example.
 ```
 
+## Advanced Features
+
+### 🌐 Mainnet Account Fetching
+
+The engine automatically fetches missing accounts from Solana mainnet:
+```bash
+# Query a real mainnet account - automatically fetched!
+curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 1, "method": "getBalance", 
+       "params": ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"]}'
+```
+
+### 🔮 Transaction Simulation
+
+Preview transaction effects without executing:
+```bash
+curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 1, "method": "simulateTransaction", 
+       "params": [""]}'
+```
+
 ## Use Cases
 
 ### Testing DeFi Protocols
@@ -134,6 +157,7 @@ curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
 # 3. Test your protocol interactions
 # (simulate deposits, swaps, etc.)
 ```
+
 
 ## Architecture
 ```
