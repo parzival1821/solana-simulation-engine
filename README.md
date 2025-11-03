@@ -111,6 +111,45 @@ curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
 See `tests/scripts/test_send_transaction.sh` for a complete example.
 ```
 
+### 🪙 SPL Token Support
+
+Set and query SPL token balances:
+
+#### Set Token Balance
+```bash
+curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "set_token_balance",
+    "params": {
+      "owner": "<wallet_address>",
+      "mint": "<token_mint>",
+      "amount": 1000000000
+    }
+  }'
+```
+
+#### Get Token Balance
+```bash
+curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "get_token_balance",
+    "params": {
+      "owner": "<wallet_address>",
+      "mint": "<token_mint>"
+    }
+  }'
+```
+
+**Example with USDC:**
+- Mint: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
+- Amount: `1000000000` (1000 USDC with 6 decimals)
+
 ## Advanced Features
 
 ### 🌐 Mainnet Account Fetching

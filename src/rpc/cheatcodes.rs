@@ -23,12 +23,24 @@ pub async fn handle_set_balance(
     Ok(json!("Success"))
 }
 
-/// Handle set_token_balance cheatcode (TODO for later)
 pub async fn handle_set_token_balance(
     manager: &ForkManager,
     fork_id: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    // TODO: Implement later
-    Err("set_token_balance not yet implemented".to_string())
+    let owner = params.get("owner")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Missing owner parameter".to_string())?;
+    
+    let mint = params.get("mint")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Missing mint parameter".to_string())?;
+    
+    let amount = params.get("amount")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "Missing or invalid amount parameter".to_string())?;
+    
+    manager.set_token_balance(fork_id, owner, mint, amount).await?;
+    
+    Ok(json!("Success"))
 }

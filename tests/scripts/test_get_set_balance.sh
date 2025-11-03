@@ -18,7 +18,14 @@ echo -e "${GREEN}✓ Fork created: $FORK_ID${NC}\n"
 
 # Test 2: Balance Manipulation
 echo -e "${YELLOW}Test 2: Balance Manipulation${NC}"
-ADDRESS="11111111111111111111111111111111"
+# ADDRESS="11111111111111111111111111111111"
+ADDRESS="D2bJqkFEa65xFKii3dW2ByrZEitdpX3PLR9uezPoSNKi" # this is my actual account, and it the tests check out 
+
+BALANCE=$(curl -s -X POST http://localhost:3000/fork/$FORK_ID/rpc \
+  -H "Content-Type: application/json" \
+  -d "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"getBalance\", \"params\": [\"$ADDRESS\"]}" | jq -r .result)
+
+echo " Balance before setting : $BALANCE lamports\n"
 
 # Set balance to 5 SOL
 curl -s -X POST http://localhost:3000/fork/$FORK_ID/rpc \
@@ -71,7 +78,8 @@ fi
 
 # Test 4: Multiple Operations on Same Fork
 echo -e "${YELLOW}Test 4: Multiple Balance Changes${NC}"
-ADDRESS_2="22222222222222222222222222222222"
+ADDRESS_2="11111111111111111111111111111111"
+# if the account doesnt exist on mainnet also, it will error out and show NULL lamports
 
 curl -s -X POST http://localhost:3000/fork/$FORK_ID/rpc \
   -H "Content-Type: application/json" \

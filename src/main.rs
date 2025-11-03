@@ -81,10 +81,12 @@ async fn handle_rpc(
         "sendTransaction" => rpc::standard::handle_send_transaction(&manager, &fork_id, &params).await,
         "getLatestBlockhash" => rpc::standard::handle_get_latest_blockhash(&manager, &fork_id, &params).await,
         "getAccountInfo" => rpc::standard::handle_get_account_info(&manager, &fork_id, &params).await,
+        "get_token_balance" => rpc::standard::handle_get_token_balance(&manager, &fork_id, &params).await,
         
         // Cheatcode methods
         "set_balance" => rpc::cheatcodes::handle_set_balance(&manager, &fork_id, &params).await,
         "set_token_balance" => rpc::cheatcodes::handle_set_token_balance(&manager, &fork_id, &params).await,
+        
         
         _ => Err(format!("Method not found: {}", method)),
     };

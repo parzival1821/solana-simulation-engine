@@ -85,3 +85,21 @@ pub async fn handle_get_account_info(
         }
     }
 }
+
+pub async fn handle_get_token_balance(
+    manager: &ForkManager,
+    fork_id: &str,
+    params: &Value,
+) -> Result<Value, String> {
+    let owner = params.get("owner")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Missing owner parameter".to_string())?;
+    
+    let mint = params.get("mint")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Missing mint parameter".to_string())?;
+    
+    let balance = manager.get_token_balance(fork_id, owner, mint).await?;
+    
+    Ok(json!(balance))
+}
