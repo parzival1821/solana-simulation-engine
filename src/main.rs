@@ -17,7 +17,8 @@ async fn main() {
         .route("/health", get(health_check))      
         .route("/fork/create", post(create_fork))  
         .route("/fork/{fork_id}/rpc", post(handle_rpc))
-        .with_state(manager);  
+        .route("/fork/{fork_id}/transactions", get(get_transaction_history))
+        .with_state(manager);
     
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await  
@@ -45,6 +46,20 @@ async fn create_fork(
     Json(json!({
         "fork_id": fork_id
     }))
+}
+
+async fn get_transaction_history(
+    Path(fork_id) : Path<String>,
+    State(manager) : State<ForkManager>
+) -> Json<Value> {
+    match manager.get_transaction_history(&fork_id).await {
+        Ok(history) => Json(json!({
+            "transactions" : history
+        })),
+        Err(e) => Json(json!({
+            "error" : e
+        })),
+    }
 }
 
 async fn handle_rpc(

@@ -12,13 +12,23 @@ use std::str::FromStr;
 use solana_system_interface::program as system_program;
 use bincode;
 use solana_client::rpc_client::RpcClient; 
+use chrono;
+use serde::Serialize;
 
 use dotenv::dotenv;
 use std::env;
 
 struct Fork {
     svm : Arc<RwLock<LiteSVM>>,
-    timestamp : Instant
+    timestamp : Instant,
+    pub transaction_history: Arc<RwLock<Vec<TransactionRecord>>>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct TransactionRecord {
+    pub signature: String,
+    pub timestamp: String,
+    pub success: bool,
 }
 
 // Define the storage type
@@ -41,7 +51,7 @@ impl ForkManager {
         
          let manager = Self {
             forks: Arc::new(RwLock::new(HashMap::new())),
-            rpc_client : Arc::new(RpcClient::new(mainnet_default.to_string()))
+            rpc_client : Arc::new(RpcClient::new(mainnet_default.to_string())),
         };
         
         // Start cleanup task
@@ -101,7 +111,8 @@ impl ForkManager {
         let mut forks = self.forks.write().await;
         let mut fork = Fork{
             svm : Arc::new(RwLock::new(LiteSVM::new())),
-            timestamp : Instant::now()
+            timestamp : Instant::now(),
+            transaction_history : Arc::new(RwLock::new(Vec::new())),
         };
         forks.insert(uid.clone(), fork);
         uid
@@ -184,11 +195,77 @@ impl ForkManager {
                         .map_err(|e| format!("Error in deserializing the tx : {}", e))?;
 
         // Send it to the SVM
-        let result = svm.send_transaction(tx)
-                        .map_err(|e| format!("Transaction failed : {:?}", e))?;
+        let result = svm.send_transaction(tx);
         
         // Return signature
-        Ok(result.signature.to_string())
+        // Ok(result.signature.to_string())
+
+        match result {
+            Ok(metadata) => {
+                let sig = metadata.signature.to_string();
+                let mut history = fork.transaction_history.write().await;
+                history.push(TransactionRecord{
+                    signature : sig.clone(),
+                    timestamp : chrono::Local::now().to_rfc3339(),
+                    success : true,
+                });
+
+                Ok(sig)
+            }
+            Err(e) => {
+                let mut history = fork.transaction_history.write().await;
+                history.push(TransactionRecord{
+                    signature : "failed".to_string(),
+                    timestamp : chrono::Local::now().to_rfc3339(),
+                    success : false,
+                });
+
+                Err(format!("Transaction failed : {:?}",e))
+            }
+        }
+
+        // match result {
+        //     Ok(metadata) => {
+        //         // Extract signature from transaction metadata
+        //         let signature = metadata.signature.to_string();
+                
+        //         // Record transaction
+        //         if let Some(history) = fork.transaction_history.write().await {
+        //             let mut hist = history.write().await;
+        //             hist.push(TransactionRecord {
+        //                 signature: signature.clone(),
+        //                 timestamp: chrono::Local::now().to_rfc3339(),
+        //                 success: true,
+        //             });
+        //         }
+                
+        //         println!("✅ Transaction executed: {}", signature);
+        //         Ok(signature)
+        //     }
+        //     Err(e) => {
+        //         // Record failure
+        //         if let Some(history) = fork.transaction_history.as_ref() {
+        //             let mut hist = history.write().await;
+        //             hist.push(TransactionRecord {
+        //                 signature: "failed".to_string(),
+        //                 timestamp: chrono::Local::now().to_rfc3339(),
+        //                 success: false,
+        //             });
+        //         }
+                
+        //         // Format error properly
+        //         Err(format!("Transaction failed: {:?}", e))
+        //     }
+        // }
+    }
+
+    pub async fn get_transaction_history(&self, fork_id: &str) -> Result<Vec<TransactionRecord>, String> {
+        let forks = self.forks.read().await;
+        let fork = forks.get(fork_id)
+            .ok_or_else(|| "Fork not found".to_string())?;
+        
+        let history = fork.transaction_history.read().await;
+        Ok(history.clone())
     }
 
     pub async fn get_latest_blockhash(&self, fork_id: &str) -> Result<Hash, String> {
@@ -228,7 +305,7 @@ impl ForkManager {
                 Ok(Some(account))
             }
             Err(e) => {
-                println!("⚠️  Account not found on mainnet: {}", e);
+                println!("⚠️  Account not found on mainnet: {:#?}", e);
                 Ok(None)
             }
         }
