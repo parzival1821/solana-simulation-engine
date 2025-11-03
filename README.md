@@ -1,21 +1,51 @@
 # Solana Fork Engine
 
-A lightweight Solana simulation engine that creates isolated network forks for testing dapp interactions without touching mainnet.
+A lightweight Solana simulation engine that creates isolated network forks for testing dApp interactions without touching mainnet. Built with [liteSVM](https://github.com/LiteSVM/litesvm) for fast, in-memory Solana blockchain simulation.
+
+## Overview
+
+This engine allows developers to:
+- Create isolated forks of Solana mainnet state
+- Test protocol interactions safely without spending real funds
+- Manipulate account balances (SOL and SPL tokens) instantly
+- Execute and simulate transactions in a controlled environment
+- Automatically fetch missing accounts from mainnet on-demand
+
+Similar to how [Tenderly](https://tenderly.co) provides Ethereum mainnet forks, this engine brings the same capability to Solana.
+
+---
 
 ## Features
 
-- ✅ **Isolated Forks**: Each user gets their own fork of Solana state
-- ✅ **Balance Manipulation**: Set SOL balances instantly via cheatcodes
-- ✅ **Standard RPC**: Compatible with standard Solana RPC methods
-- ✅ **Auto Cleanup**: Forks automatically expire after 15 minutes
-- ✅ **Fast & Lightweight**: Built on liteSVM for in-memory simulation
+### Core Functionality
+- ✅ **Mainnet Fork Creation** - Fork from latest Solana state using liteSVM
+- ✅ **Fork Isolation** - Each user gets independent fork environment
+- ✅ **Auto-Expiration** - Forks automatically cleanup after 15 minutes
+- ✅ **SOL Balance Manipulation** - Instantly set account balances
+- ✅ **SPL Token Support** - Set and query token balances
+- ✅ **Transaction Execution** - Execute real Solana transactions
+- ✅ **Mainnet Account Fetching** - Auto-fetch missing accounts from mainnet
+- ✅ **Transaction History** - Track all executed transactions per fork
+- ✅ **JSON-RPC API** - Standard Solana RPC + custom cheatcodes
+
+### Advanced Features
+- **On-Demand State Loading** - Accounts fetched from mainnet only when needed
+- **Concurrent Fork Support** - Multiple isolated forks running simultaneously
+- **Thread-Safe Operations** - Safe concurrent access to fork state
+- **Standard RPC Compliance** - Compatible with existing Solana tooling
+
+---
 
 ## Quick Start
 
+### Prerequisites
+- Rust 1.70+ and Cargo
+- `jq` (for running test scripts)
+
 ### Installation
 ```bash
-git clone <your-repo>
-cd solana-fork-engine
+git clone https://github.com/parzival1821/solana-simulation-engine
+cd solana-simulation-engine
 cargo build --release
 ```
 
@@ -26,13 +56,31 @@ cargo run
 ```
 
 ### Run Tests
+
+**Unit Tests:**
 ```bash
-./test.sh
+cargo test -- --nocapture
 ```
+
+**Integration Tests:**
+```bash
+bash tests/scripts/test_get_set_balance.sh
+bash tests/scripts/test_token_balance.sh
+bash tests/scripts/test_isolation.sh
+bash tests/scripts/test_mainnet_fork.sh
+bash tests/scripts/test_send_transaction.sh
+bash tests/scripts/test_spl_token.sh
+bash tests/scripts/test_token_balance.sh 
+bash tests/scripts/test_transaction_recording.sh
+```
+
+---
 
 ## API Documentation
 
-### 1. Create Fork
+### Fork Management
+
+#### 1. Create Fork
 ```bash
 curl -X POST http://localhost:3000/fork/create
 ```
@@ -44,7 +92,13 @@ curl -X POST http://localhost:3000/fork/create
 }
 ```
 
-### 2. Get Balance (Standard RPC)
+Each fork is isolated and expires after 15 minutes.
+
+---
+
+### Standard RPC Methods
+
+#### 2. Get Balance
 ```bash
 curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
   -H "Content-Type: application/json" \
@@ -65,7 +119,94 @@ curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
 }
 ```
 
-### 3. Set Balance (Cheatcode)
+**Note:** If the account doesn't exist in the fork, it will be automatically fetched from mainnet.
+
+---
+
+#### 3. Get Account Info
+```bash
+curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getAccountInfo",
+    "params": ["<solana_address>"]
+  }'
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "value": {
+      "lamports": 1000000000,
+      "owner": "11111111111111111111111111111111",
+      "data": ["", "base58"],
+      "executable": false,
+      "rentEpoch": 0
+    }
+  }
+}
+```
+
+---
+
+#### 4. Get Latest Blockhash
+```bash
+curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getLatestBlockhash",
+    "params": []
+  }'
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "blockhash": "CmpNeggWJ4JaWJeJ8YKN1Zypmk7uvQq3PECGUCAEMbky"
+  }
+}
+```
+
+---
+
+#### 5. Send Transaction
+```bash
+curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "sendTransaction",
+    "params": ["<base58_encoded_signed_transaction>"]
+  }'
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": "5JK8z3xB9F2nP7wY..."
+}
+```
+
+**See:** `tests/scripts/test_send_transaction.sh` for complete example with transaction creation.
+
+---
+
+### Cheatcode Methods
+
+#### 6. Set Balance (SOL)
 ```bash
 curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
   -H "Content-Type: application/json" \
@@ -89,33 +230,25 @@ curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
 }
 ```
 
-### 4. Send Transaction
-```bash
-# First get the latest blockhash
-curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc": "2.0", "id": 1, "method": "getLatestBlockhash", "params": []}'
+---
 
-# Create a properly signed transaction using the blockhash
-# Then send it:
+#### 7. Set Token Balance (SPL)
+```bash
 curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "sendTransaction",
-    "params": ["<base58_encoded_transaction>"]
+    "method": "set_token_balance",
+    "params": {
+      "owner": "<wallet_address>",
+      "mint": "<token_mint_address>",
+      "amount": 1000000000
+    }
   }'
 ```
 
-See `tests/scripts/test_send_transaction.sh` for a complete example.
-```
-
-### 🪙 SPL Token Support
-
-Set and query SPL token balances:
-
-#### Set Token Balance
+**Example with USDC:**
 ```bash
 curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
   -H "Content-Type: application/json" \
@@ -124,16 +257,20 @@ curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
     "id": 1,
     "method": "set_token_balance",
     "params": {
-      "owner": "<wallet_address>",
-      "mint": "<token_mint>",
+      "owner": "D2bJqkFEa65xFKii3dW2ByrZEitdpX3PLR9uezPoSNKi",
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       "amount": 1000000000
     }
   }'
 ```
 
-#### Get Token Balance
+**Note:** Amount is in smallest units (USDC has 6 decimals, so 1000000000 = 1000 USDC)
+
+---
+
+#### 8. Get Token Balance
 ```bash
-curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
+curl -X POST http://localhost:3000/fork/{fork_id}/rpc \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -141,46 +278,50 @@ curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
     "method": "get_token_balance",
     "params": {
       "owner": "<wallet_address>",
-      "mint": "<token_mint>"
+      "mint": "<token_mint_address>"
     }
   }'
 ```
 
-**Example with USDC:**
-- Mint: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
-- Amount: `1000000000` (1000 USDC with 6 decimals)
-
-## Advanced Features
-
-### 🌐 Mainnet Account Fetching
-
-The engine automatically fetches missing accounts from Solana mainnet:
-```bash
-# Query a real mainnet account - automatically fetched!
-curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc": "2.0", "id": 1, "method": "getBalance", 
-       "params": ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"]}'
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": 1000000000
+}
 ```
 
-### 🔮 Transaction Simulation
+---
 
-Preview transaction effects without executing:
+#### 9. Get Transaction History
 ```bash
-curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc": "2.0", "id": 1, "method": "simulateTransaction", 
-       "params": [""]}'
+curl http://localhost:3000/fork/{fork_id}/transactions
 ```
+
+**Response:**
+```json
+{
+  "transactions": [
+    {
+      "signature": "5JK8z3xB9F2nP7wY...",
+      "timestamp": "2025-11-04T14:30:45+00:00",
+      "success": true
+    }
+  ]
+}
+```
+
+---
 
 ## Use Cases
 
-### Testing DeFi Protocols
+### 1. Testing DeFi Protocols
 ```bash
-# 1. Create fork
+# Create fork
 FORK_ID=$(curl -s -X POST http://localhost:3000/fork/create | jq -r .fork_id)
 
-# 2. Fund test wallet
+# Fund test wallet with 100 SOL
 curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
   -H "Content-Type: application/json" \
   -d '{
@@ -189,73 +330,178 @@ curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
     "method": "set_balance",
     "params": {
       "address": "YourWalletAddress",
-      "lamports": 10000000000
+      "lamports": 100000000000
     }
   }'
 
-# 3. Test your protocol interactions
-# (simulate deposits, swaps, etc.)
+# Now safely test deposits, swaps, etc. without spending real SOL
 ```
 
+### 2. Testing with Mainnet State
+```bash
+# Query real mainnet account - automatically fetched!
+curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getAccountInfo",
+    "params": ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"]
+  }'
+
+# Modify it in your fork (mainnet unchanged)
+curl -X POST http://localhost:3000/fork/$FORK_ID/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "set_balance",
+    "params": {
+      "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "lamports": 10000000000
+    }
+  }'
+```
+
+---
 
 ## Architecture
 ```
 src/
-├── main.rs              # HTTP server and routing
-├── fork_manager.rs      # Fork lifecycle management
+├── main.rs              # HTTP server (Axum) and routing
+├── fork_manager.rs      # Fork lifecycle, isolation, cleanup
 └── rpc/
-    ├── mod.rs
-    ├── standard.rs      # Standard RPC methods (getBalance)
-    └── cheatcodes.rs    # Custom methods (set_balance)
+    ├── mod.rs          # RPC module exports
+    ├── standard.rs     # Standard Solana RPC methods
+    └── cheatcodes.rs   # Custom state manipulation methods
 ```
 
 ### Key Components
 
-- **ForkManager**: Manages fork lifecycle, isolation, and cleanup
-- **Standard RPC**: Implements Solana-compatible RPC methods
-- **Cheatcodes**: Custom methods for state manipulation
+**ForkManager**
+- Creates and manages fork lifecycle
+- Handles automatic cleanup (15-minute TTL)
+- Provides isolation between forks
+- Auto-fetches missing accounts from mainnet
 
-## Tech Stack
+**Standard RPC Handler**
+- Implements Solana-compatible RPC methods
+- `getBalance`, `getAccountInfo`, `sendTransaction`, `getLatestBlockhash`,`get_token_balance`
+- Compatible with existing Solana tools
 
-- [liteSVM](https://github.com/LiteSVM/litesvm) - Fast Solana VM simulation
-- [Axum](https://github.com/tokio-rs/axum) - Web framework
-- [Tokio](https://tokio.rs/) - Async runtime
+**Cheatcodes Handler**
+- Custom methods for testing
+- `set_balance` - Instantly set SOL balance
+- `set_token_balance` - Instantly set SPL token balance
+
+---
 
 ## Implementation Details
 
 ### Fork Lifecycle
 
-1. User requests fork creation
+1. User requests fork creation via `POST /fork/create`
 2. Server creates isolated liteSVM instance
-3. Fork receives unique ID
-4. Fork expires after 15 minutes (automatic cleanup)
+3. Fork receives unique UUID
+4. Fork automatically expires after 15 minutes
+5. Cleanup task removes expired forks
 
 ### Fork Isolation
 
-Each fork maintains separate:
-- Account states
-- Balances
+Each fork maintains completely separate:
+- ✅ Account states (balances, data)
+- ✅ Transaction history
+- ✅ liteSVM instance
+- ✅ On-demand loaded mainnet accounts
+
+**Changes in one fork never affect other forks or mainnet.**
+
+### Mainnet Account Fetching
+
+When an account is accessed but not present in the fork:
+1. Fork checks local state
+2. If missing, fetches from Solana mainnet RPC
+3. Caches account in fork
+4. Returns account data
+
+This enables testing with real mainnet state without pre-loading everything.
+
+---
+
+## Tech Stack
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| VM | [liteSVM](https://github.com/LiteSVM/litesvm) 0.8 | Fast Solana VM simulation |
+| Web Server | [Axum](https://github.com/tokio-rs/axum) 0.8 | HTTP routing and handlers |
+| Async Runtime | [Tokio](https://tokio.rs/) 1.48 | Async I/O and task scheduling |
+| RPC Client | solana-client 3.0 | Mainnet account fetching |
+| Serialization | serde + serde_json | JSON-RPC protocol |
+
+---
+
+## Testing
+
+### Unit Tests (14 tests)
+```bash
+cargo test -- --nocapture
+```
+
+Tests cover:
+- Fork creation and isolation
+- Balance operations (set/get)
+- Multiple accounts per fork
+- Invalid input handling
+- Concurrent access
+- SPL token operations
+- Account info retrieval
 - Transaction history
 
-Changes in one fork don't affect others.
+### Integration Tests (4 scripts)
+```bash
+# Test balance operations and fork isolation
+bash tests/scripts/test_get_set_balance.sh
 
-## Limitations
+# Test forks for different users remain isolated
+bash tests/scripts/test_isolation.sh
 
-- Forks are in-memory only (not persisted)
-- 15-minute lifetime per fork
-- Standard Solana RPC methods only (subset implemented)
+# Test mainnet info fetching 
+bash tests/scripts/test_mainnet_fork.sh
 
-## Future Enhancements
+# Test transaction execution
+bash tests/scripts/test_send_transaction.sh
 
-- [ ] SPL Token support
-- [ ] Transaction simulation
-- [ ] Extended RPC method support
-- [ ] Fork persistence option
+# Test spl token integration
+bash tests/scripts/test_spl_token.sh
+
+# Test SPL token balance manipulation
+bash tests/scripts/test_token_balance.sh
+
+# Test transaction recording
+bash tests/scripts/test_transaction_recording.sh
+
+```
+
+---
 
 ## License
 
-MIT
+MIT License
+
+---
 
 ## Author
 
+Akshat (Parzival)
+
 Built for Fluid Engineering Assignment
+
+**GitHub**: https://github.com/parzival1821/solana-simulation-engine
+
+---
+
+## Acknowledgments
+
+- [liteSVM](https://github.com/LiteSVM/litesvm) - Solana VM simulation
+- [Solana Labs](https://github.com/solana-labs/solana) - Solana SDK
+- Inspired by [Tenderly](https://tenderly.co) for Ethereum
